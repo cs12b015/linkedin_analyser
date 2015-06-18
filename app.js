@@ -4,17 +4,46 @@ var favicon = require('serve-favicon');
 var logger = require('morgan');
 var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
-var session = require('express-session')
-/*var Linkedin = require('node-linkedin');*/
+var session = require('express-session');
 var routes = require('./routes/index');
 var users = require('./routes/users');
 var passport = require('passport');
 var LinkedInStrategy = require('passport-linkedin-oauth2').Strategy;
 var Config = require('./config');
 var Linkedin = require('node-linkedin')(Config.clientID,Config.clientSecret,Config.callbackURL)
+var fs = require('fs');
+var request = require('request');
+var cheerio = require('cheerio');
 var app = express();
 var linkedin;
-  var Profile=[];
+var linkedin_work=[];
+var fb_work=[];
+
+var scrapedata=function(MAINURL){
+  request(MAINURL, function (error, response, body)
+  {
+    if (!error && response.statusCode == 200)
+      {
+        $ = cheerio.load(body);
+        $('.editable-item.section-item.current-position').find('h5 a').each(function(index,item)
+        { 
+          var boss= $(item).text();
+          if(boss!="")
+          linkedin_work[linkedin_work.length]=boss;
+      });
+      $ = cheerio.load(body);
+        $('.editable-item.section-item.past-position').find('h5 a').each(function(index,item)
+        { 
+          var boss= $(item).text();
+          if(boss!="")
+          linkedin_work[linkedin_work.length]=boss;
+      });
+      console.log(linkedin_work);
+    }
+  });
+}
+
+
 
 passport.use(new LinkedInStrategy({
     clientID: Config.clientID,
@@ -44,13 +73,11 @@ done(null, obj);
 
 app.get('/home',function(req,res,next){ 
   linkedin.people.me(function(err, $in) {
-    var jobs=$in.positions.values;
-    for(var i =0;i<jobs.length;i++){
-      Profile[i]=jobs[i].company.name;
-    }
-    console.log(Profile);
+    var mainurl =$in.publicProfileUrl
+      scrapedata(mainurl);
+      //console.log($in);  
   });
-  
+  res.redirect('/');
 });
 
 
