@@ -4,20 +4,45 @@ var favicon = require('serve-favicon');
 var logger = require('morgan');
 var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
-var session = require('express-session');
 var routes = require('./routes/index');
 var users = require('./routes/users');
 var passport = require('passport');
 var LinkedInStrategy = require('passport-linkedin-oauth2').Strategy;
-var Config = require('./config');
+var Config = require('./inconfig');
 var Linkedin = require('node-linkedin')(Config.clientID,Config.clientSecret,Config.callbackURL)
 var fs = require('fs');
 var request = require('request');
 var cheerio = require('cheerio');
+
+var FacebookStrategy = require('passport-facebook').Strategy;
+var graph = require('fbgraph');
+
+var mongoose= require('mongoose');
+
+
+
 var app = express();
 var linkedin;
+var linkedin_edu=[];
 var linkedin_work=[];
 var fb_work=[];
+var fb_edu=[];
+
+
+passport.use(new FacebookStrategy({
+ clientID: "1591772771103115",
+ clientSecret: "6c5304df365dc4d048a34fb9aebfbb24",
+ callbackURL: "http://localhost:3000/auth/facebook/callback"
+},
+function(accessToken, refreshToken, profile, done) {
+  graph.setAccessToken(accessToken);
+ process.nextTick(function () {
+   return done(null, profile);
+ });
+}
+));
+
+
 
 var scrapedata=function(MAINURL){
   request(MAINURL, function (error, response, body)
@@ -59,9 +84,7 @@ passport.use(new LinkedInStrategy({
   }
 ));
 
-app.use(session({ secret: 'keyboard cat', cookie: { maxAge: 60000 }}));
 app.use(passport.initialize());
-app.use(passport.session());
 
 passport.serializeUser(function(user, done) {
 done(null, user);
@@ -70,14 +93,44 @@ passport.deserializeUser(function(obj, done) {
 done(null, obj);
 });
 
+app.get('/start',function(req,res,next){ 
+ res.redirect('/auth/linkedin');
+});
 
-app.get('/home',function(req,res,next){ 
+
+app.get('/inhome',function(req,res,next){ 
   linkedin.people.me(function(err, $in) {
     var mainurl =$in.publicProfileUrl
       scrapedata(mainurl);
       //console.log($in);  
   });
+  res.redirect('/auth/facebook');
+});
+
+app.get('/fbhome',function(req,res,next){ 
+  graph.get('me?fields=education,work', function(err, res) {
+    var edu=res.education;
+    var workk=res.work;
+    for(var i=0;i<edu.length;i++){
+      fb_edu[i]=edu[i].school.name;
+    }
+    for(var i=0;i<workk.length;i++){
+      fb_work[i]=workk[i].employer.name;
+    }
+
+    console.log(fb_edu);
+    console.log(fb_work);
+  });
   res.redirect('/');
+});
+
+
+app.get('/auth/facebook',passport.authenticate('facebook'),function(req, res){});
+
+app.get('/auth/facebook/callback',
+passport.authenticate('facebook', { failureRedirect: '/' }),
+function(req, res) {
+  res.redirect('/fbhome');
 });
 
 
@@ -87,8 +140,9 @@ app.get('/auth/linkedin',
 app.get('/auth/linkedin/callback', 
   passport.authenticate('linkedin', { failureRedirect: '/login' }),
   function(req, res) {
-    res.redirect('/home');
+    res.redirect('/inhome');
   });
+
 
 
 
